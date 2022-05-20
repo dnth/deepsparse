@@ -98,7 +98,7 @@ from deepsparse.version import version
 
 try:
     import uvicorn
-    from fastapi import FastAPI
+    from fastapi import FastAPI, File, UploadFile
     from starlette.responses import RedirectResponse
 except Exception as err:
     raise ImportError(
@@ -163,7 +163,8 @@ def _add_pipeline_route(
         response_model=pipeline.output_schema,
         tags=["prediction"],
     )
-    async def _predict_func(request: pipeline.input_schema):
+    async def _predict_func(request: UploadFile = File(...)):
+        request = pipeline.input_schema(images=request.filename)
         results = await execute_async(
             pipeline,
             request,
