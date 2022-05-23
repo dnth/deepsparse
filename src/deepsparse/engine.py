@@ -387,8 +387,8 @@ class Engine(object):
     def benchmark(
         self,
         inp: List[numpy.ndarray],
-        num_iterations: int = 20,
-        num_warmup_iterations: int = 5,
+        run_time: int = 10,
+        warmup_time: int = 2,
         include_inputs: bool = False,
         include_outputs: bool = False,
         show_progress: bool = False,
@@ -400,12 +400,10 @@ class Engine(object):
 
         :param inp: The list of inputs to pass to the engine for benchmarking.
             The expected order is the inputs order as defined in the ONNX graph.
-        :param num_iterations: The number of iterations to run benchmarking for.
-            Default is 20
-        :param num_warmup_iterations: T number of iterations to warm up engine before
-            benchmarking. These executions will not be counted in the benchmark
-            results that are returned. Useful and recommended to bring
-            the system to a steady state. Default is 5
+        :param run_time: The number of seconds the benchmark will run.
+            Default is 10 seconds.
+        :param warmup_time: The number of seconds the benchmark will warmup before
+            running. Default is 2 seconds.
         :param include_inputs: If True, inputs from forward passes during benchmarking
             will be added to the results. Default is False
         :param include_outputs: If True, outputs from forward passes during benchmarking
@@ -420,8 +418,8 @@ class Engine(object):
 
         return self.benchmark_loader(
             loader=_infinite_loader(),
-            num_iterations=num_iterations,
-            num_warmup_iterations=num_warmup_iterations,
+            run_time=run_time,
+            warmup_time=warmup_time,
             include_inputs=include_inputs,
             include_outputs=include_outputs,
             show_progress=show_progress,
@@ -430,8 +428,8 @@ class Engine(object):
     def benchmark_loader(
         self,
         loader: Iterable[List[numpy.ndarray]],
-        num_iterations: int = 20,
-        num_warmup_iterations: int = 5,
+        run_time: int = 10,
+        warmup_time: int = 2,
         include_inputs: bool = False,
         include_outputs: bool = False,
         show_progress: bool = False,
@@ -443,12 +441,10 @@ class Engine(object):
 
         :param loader: An iterator of inputs to pass to the engine for benchmarking.
             The expected order of each input is as defined in the ONNX graph.
-        :param num_iterations: The number of iterations to run benchmarking for.
-            Default is 20
-        :param num_warmup_iterations: T number of iterations to warm up engine before
-            benchmarking. These executions will not be counted in the benchmark
-            results that are returned. Useful and recommended to bring
-            the system to a steady state. Default is 5
+        :param run_time: The number of seconds the benchmark will run.
+            Default is 10 seconds.
+        :param warmup_time: The number of seconds the benchmark will warmup before
+            running. Default is 2 seconds.
         :param include_inputs: If True, inputs from forward passes during benchmarking
             will be added to the results. Default is False
         :param include_outputs: If True, outputs from forward passes during benchmarking
@@ -456,24 +452,25 @@ class Engine(object):
         :param show_progress: If True, will display a progress bar. Default is False
         :return: the results of benchmarking
         """
-        assert num_iterations >= 1 and num_warmup_iterations >= 0, (
-            "num_iterations and num_warmup_iterations must be non negative for "
-            "benchmarking."
-        )
-        completed_iterations = 0
+        assert (
+            run_time >= 1 and warmup_time >= 0
+        ), "run_time and warmup_time must be non negative for benchmarking."
+
+        max_warmup_time = time.time() + warmup_time
+        max_time = time.time() + warmup_time + run_time
         results = BenchmarkResults()
 
         if show_progress:
-            progress_bar = tqdm(total=num_iterations)
+            progress_bar = tqdm(total=warmup_time + run_time)
 
-        while completed_iterations < num_warmup_iterations + num_iterations:
+        while time.time() < max_time:
             for batch in loader:
                 # run benchmark
                 start = time.time()
-                out = self.run(batch)
+                out = self.run(batch, val_inp=False)
                 end = time.time()
 
-                if completed_iterations >= num_warmup_iterations:
+                if time.time() >= max_warmup_time:
                     # update results if warmup iterations are completed
                     results.append_batch(
                         time_start=start,
@@ -483,11 +480,9 @@ class Engine(object):
                         outputs=out if include_outputs else None,
                     )
                     if show_progress:
-                        progress_bar.update(1)
+                        progress_bar.update(end - start)
 
-                completed_iterations += 1
-
-                if completed_iterations >= num_warmup_iterations + num_iterations:
+                if time.time() >= max_time:
                     break
 
         if show_progress:
