@@ -157,19 +157,57 @@ def _add_pipeline_route(
             )
         path = f"/predict/{pipeline.task}"
         defined_tasks.add(pipeline.task)
+    from typing import Union
+
+
+    """
+    Proposal of solution tested for two types of input:
+    
+    # FileUpload, to test using the following curl request:
+    
+    curl -X 'POST'   'http://localhost:5544/predict'   -H 'accept: application/json'   -H 'Content-Type: multipart/form-data'   -F 'request=@img.jpg;type=image/jpeg'
+    
+    (note: run this command while being in a directory with an existing, valid img.jpg file)
+    
+    # General string payload
+    
+    curl -X 'POST' \
+  'http://localhost:5544/predict' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: multipart/form-data' \
+  -F 'request={"images": ["str1.jpg", "str2.jpg"]}'
+    """
+
+    from typing import Union
+    import json
 
     @app.post(
         path,
         response_model=pipeline.output_schema,
         tags=["prediction"],
     )
-    async def _predict_func(request: UploadFile = File(...)):
-        request = pipeline.input_schema(images=request.filename)
+    async def _predict_func(request: Union[UploadFile, str] = File(...)):
+        if isinstance(request, str):
+            # request is a string
+            # convert json-like string into a dictionary
+            request_dict = json.loads(request.replace("'", "\""))
+            # extract the schema from the dictionary
+            request = pipeline.input_schema.parse_obj(request_dict)
+
+        else:
+            # request is an UploadFile object:
+            # TODO: Add logic for converting UploadFile object into input_schema
+            return None
+
         results = await execute_async(
             pipeline,
             request,
         )
         return serializable_response(results)
+
+    
+
+
 
 
 def server_app_factory():
