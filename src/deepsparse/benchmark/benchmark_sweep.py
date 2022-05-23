@@ -44,6 +44,7 @@ from typing import Dict, List
 
 from deepsparse.benchmark.benchmark_model import benchmark_model
 
+
 __all__ = ["benchmark_sweep"]
 
 

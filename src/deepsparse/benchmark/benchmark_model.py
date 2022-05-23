@@ -108,6 +108,7 @@ from deepsparse.utils import (
     parse_input_shapes,
 )
 
+
 __all__ = ["benchmark_model"]
 
 
