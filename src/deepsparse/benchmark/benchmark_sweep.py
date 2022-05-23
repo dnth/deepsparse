@@ -39,6 +39,8 @@ Example sweep over BERT models:
     )
 """
 
+import csv
+import time
 from itertools import product
 from typing import Dict, List
 
@@ -50,52 +52,81 @@ __all__ = ["benchmark_sweep"]
 
 def benchmark_sweep(
     models: List[str],
-    batch_sizes: List[int],
+    batch_sizes: List[int] = [1],
     num_cores: List[int] = [None],
     scenario_streams_dict: Dict = {"sync": [None]},
     input_shapes: List[str] = [None],
     engines: List[str] = ["deepsparse"],
     run_time: int = 30,
     warmup_time: int = 5,
+    export_csv_path: str = None,
 ):
-    print(
-        "Model, Engine, Batch Size, Num Cores, Input Shape, Scenario, Num Streams, "
-        "Throughput, Mean Latency, Command"
-    )
+    if not export_csv_path:
+        export_csv_path = "benchmark_sweep_{}.csv".format(
+            time.strftime("%Y%m%d_%H%M%S")
+        )
 
-    for (
-        model,
-        batch_size,
-        num_core,
-        input_shape,
-        engine,
-        (scenario, num_streams_list),
-    ) in product(
-        models,
-        batch_sizes,
-        num_cores,
-        input_shapes,
-        engines,
-        scenario_streams_dict.items(),
-    ):
-        for num_streams in num_streams_list:
-            result = benchmark_model(
-                model_path=model,
-                batch_size=batch_size,
-                input_shapes=input_shape,
-                num_cores=num_core,
-                scenario=scenario,
-                time=run_time,
-                warmup_time=warmup_time,
-                num_streams=num_streams,
-                engine=engine,
-            )
+    print(f"Starting benchmarking sweep, writing result to {export_csv_path}")
 
-            items_per_second = result["benchmark_result"]["items_per_sec"]
-            latency_mean = result["benchmark_result"]["mean"]
-            latency_median = result["benchmark_result"]["median"]
+    with open(export_csv_path, "wt") as fp:
+        writer = csv.writer(fp, delimiter=",")
+        writer.writerow(
+            [
+                "Model",
+                "Engine",
+                "Batch Size",
+                "Num Cores",
+                "Input Shape",
+                "Scenario",
+                "Num Streams",
+                "Throughput",
+                "Mean Latency",
+                "Median Latency",
+                "Command",
+            ]
+        )
 
-            print(
-                f"{model}, {batch_size}, {input_shape}, {scenario}, {num_streams}, "
-                f"{items_per_second}, {latency_mean}, {latency_median}"
-            )
+        for (
+            model,
+            batch_size,
+            num_core,
+            input_shape,
+            engine,
+            (scenario, num_streams_list),
+        ) in product(
+            models,
+            batch_sizes,
+            num_cores,
+            input_shapes,
+            engines,
+            scenario_streams_dict.items(),
+        ):
+            for num_streams in num_streams_list:
+                result = benchmark_model(
+                    model_path=model,
+                    batch_size=batch_size,
+                    input_shapes=input_shape,
+                    num_cores=num_core,
+                    scenario=scenario,
+                    time=run_time,
+                    warmup_time=warmup_time,
+                    num_streams=num_streams,
+                    engine=engine,
+                )
+
+                items_per_second = result["benchmark_result"]["items_per_sec"]
+                latency_mean = result["benchmark_result"]["mean"]
+                latency_median = result["benchmark_result"]["median"]
+
+                writer.writerow(
+                    [
+                        model,
+                        batch_size,
+                        input_shape,
+                        scenario,
+                        num_streams,
+                        items_per_second,
+                        latency_mean,
+                        latency_median,
+                    ]
+                )
